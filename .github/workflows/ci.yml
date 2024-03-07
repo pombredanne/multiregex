@@ -11,81 +11,46 @@ defaults:
 
 jobs:
   tests:
-    name: Tests - Python ${{ matrix.python-version }} - ${{ matrix.os }}
+    name: Tests - ${{ matrix.environment-file }}
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { python-version: "3.4", os: ubuntu-18.04 }
-          - { python-version: "3.6", os: windows-2019 }
-          - { python-version: "3.8", os: windows-latest }
-          - { python-version: "3.10", os: ubuntu-latest }
+          - { os: ubuntu-latest,  environment-file: .conda_lock_files/py36_lin64.yml }
+          - { os: ubuntu-latest,  environment-file: .conda_lock_files/py312_lin64.yml }
+          - { os: windows-latest, environment-file: .conda_lock_files/py36_win64.yml }
+          - { os: windows-latest, environment-file: .conda_lock_files/py312_win64.yml }
+          - { os: macos-latest,   environment-file: .conda_lock_files/py36_osx64.yml }
+          - { os: macos-latest,   environment-file: .conda_lock_files/py312_osx64.yml }
     steps:
       - name: Checkout branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
       - name: Fetch full git history
         run: git fetch --prune --unshallow
-      - name: Set up Conda env
-        uses: mamba-org/provision-with-micromamba@f347426e5745fe3dfc13ec5baf20496990d0281f
+      - name: Set up Micromamba env
+        uses: mamba-org/setup-micromamba@422500192359a097648154e8db4e39bdb6c6eed7
         with:
-          extra-specs: |
-            python=${{ matrix.python-version }}
-        if: matrix.python-version != '3.4'
-      - name: "Install Python 3.4"
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.4
-        if: matrix.python-version == '3.4'
-      - name: Run tests
-        run: |
-          if [ ${{ matrix.python-version }} = 3.4 ]; then
-            pip install pytest pyahocorasick
-            export PYTHONPATH=src
-          else
-            pip install -e .
-          fi
-          pytest -v tests/
+          environment-file: ${{ matrix.environment-file }}
+          create-args: >-
+            pytest-emoji
+            pytest-md
+      - name: pip install
+        run: pip install -e .
+      - name: Run pytest
+        uses: pavelzw/pytest-action@v2
 
   pre-commit-checks:
-    name: pre-commit checks
-    timeout-minutes: 10
+    name: Pre-commit checks - Python 3.12
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+      - name: Run pre-commit-conda
+        uses: quantco/pre-commit-conda@v1
         with:
-          ref: ${{ github.head_ref }}
-      - name: Install Python 3.10
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-      - name: Run pre-commit checks
-        uses: pre-commit/action@v3.0.0
-
-  linux-conda-build:
-    name: Build Conda package
-    needs: [tests, pre-commit-checks]
-    timeout-minutes: 10
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout branch
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
-      - name: Fetch full git history
-        run: git fetch --prune --unshallow
-      - name: Set up Conda env
-        uses: mamba-org/provision-with-micromamba@f347426e5745fe3dfc13ec5baf20496990d0281f
-        with:
-          environment-file: false
-          environment-name: build
-          channels: conda-forge
-          extra-specs: |
-            python=3.9
-            boa
-      - name: Build Conda package
-        run: conda mambabuild conda.recipe
+          python-version: "3.12"
